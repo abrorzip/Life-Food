@@ -1,19 +1,263 @@
-const tg=window.Telegram?.WebApp;
-if(tg){tg.ready();tg.expand();tg.setHeaderColor('#1f7a4d');tg.setBackgroundColor('#fbfaf7');}
-const s={i:0,who:'',goal:'',cal:'',meal:'',table:'',location:null,pay:'card'};
-const screens=[...document.querySelectorAll('.screen')],title=document.querySelector('#title'),sub=document.querySelector('#subtitle');
-const titles=['Xush kelibsiz!','Kim uchun?','Maqsadingiz nima?','Kunlik kaloriya','Ovqatlanish turi','Yetkazib berish','Buyurtmangiz'];
-const subs=['Siz uchun qulay va foydali ovqatlanish rejasini tanlang.','Buyurtma kim uchun ekanini belgilang.','Maqsadingizga mos menyuni tanlang.','Sizga mos kunlik kaloriyani tanlang.','Ovqatlanish rejangizni belgilang.','Stol va yetkazib berish ma’lumotlarini kiriting.','Ma’lumotlarni tekshiring va to‘lovni tanlang.'];
-function render(){screens.forEach((x,i)=>x.classList.toggle('active',i===s.i));title.textContent=titles[s.i];sub.textContent=subs[s.i];document.querySelector('#step').textContent=(s.i+1)+' / 7';document.querySelector('#back').classList.toggle('hidden',s.i===0);document.querySelector('#next').textContent=s.i===6?'Buyurtma berish':'Davom etish';if(s.i===6)summary();}
-function pick(selector,key,value){document.querySelectorAll(selector).forEach(x=>x.classList.toggle('selected',x.dataset[key]===value))}
-document.querySelectorAll('[data-who]').forEach(x=>x.onclick=()=>{s.who=x.dataset.who;pick('[data-who]','who',s.who);document.querySelector('#recipient').classList.toggle('hidden',s.who!=='other')});
-document.querySelectorAll('[data-goal]').forEach(x=>x.onclick=()=>{s.goal=x.dataset.goal;pick('[data-goal]','goal',s.goal)});
-document.querySelectorAll('[data-cal]').forEach(x=>x.onclick=()=>{s.cal=x.dataset.cal;pick('[data-cal]','cal',s.cal)});
-document.querySelectorAll('[data-meal]').forEach(x=>x.onclick=()=>{s.meal=x.dataset.meal;pick('[data-meal]','meal',s.meal)});
-document.querySelectorAll('[data-pay]').forEach(x=>x.onclick=()=>{s.pay=x.dataset.pay;document.querySelectorAll('[data-pay]').forEach(y=>y.classList.toggle('selected',y===x))});
-document.querySelector('#loc').onclick=()=>{const p=document.querySelector('#locStatus');if(!navigator.geolocation){p.textContent='Geolokatsiya mavjud emas.';return}p.textContent='Aniqlanmoqda...';navigator.geolocation.getCurrentPosition(x=>{s.location={lat:x.coords.latitude,lon:x.coords.longitude};p.textContent='✓ Joylashuv aniqlandi'},()=>p.textContent='Joylashuvga ruxsat berilmadi.')};
-function validate(){if(s.i===0){if(!document.querySelector('#name').value.trim()||!document.querySelector('#surname').value.trim()||!document.querySelector('#phone').value.trim())return'Ism, familiya va telefonni kiriting.'}if(s.i===1&&!s.who)return'Kim uchun buyurtma ekanini tanlang.';if(s.i===2&&!s.goal)return'Maqsadni tanlang.';if(s.i===3&&!s.cal)return'Kaloriyani tanlang.';if(s.i===4&&!s.meal)return'Ovqatlanish turini tanlang.';if(s.i===5){s.table=document.querySelector('#table').value.trim();if(!s.table)return'Stol raqamini kiriting.'}return''}
-function summary(){const g={loss:'Vazn tashlash',form:'Formani saqlash',gain:'Vazn yig‘ish'};document.querySelector('#summary').innerHTML=[['Mijoz',document.querySelector('#name').value+' '+document.querySelector('#surname').value],['Telefon',document.querySelector('#phone').value],['Kim uchun',s.who==='other'?'Boshqaga':'O‘zimga'],['Maqsad',g[s.goal]],['Kaloriya',s.cal==='individual'?'Individual':s.cal+' kcal'],['Menyu',s.meal==='individual'?'Individual':'Standart'],['Stol',s.table]].map(x=>'<div class="sum"><span>'+x[0]+'</span><b>'+x[1]+'</b></div>').join('')}
-async function submitOrder(){const payload={name:document.querySelector('#name').value.trim(),surname:document.querySelector('#surname').value.trim(),phone:document.querySelector('#phone').value.trim(),recipientPhone:document.querySelector('#recipientPhone')?.value.trim()||null,forWho:s.who,goal:s.goal,calories:s.cal,meal:s.meal,table:s.table,location:s.location,payment:s.pay,telegramInitData:tg?.initData||null};const api=window.LIFE_FOOD_API||'';if(api){const r=await fetch(api+'/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok)throw new Error('ORDER_FAILED')}return true}
-document.querySelector('#flow').onsubmit=async e=>{e.preventDefault();const err=validate();if(err){tg?.showAlert(err);if(!tg)alert(err);return}if(s.i<6){s.i++;render();return}try{document.querySelector('#next').disabled=true;await submitOrder();document.querySelector('#flow').classList.add('hidden');document.querySelector('.hero').classList.add('hidden');document.querySelector('#success').classList.remove('hidden');tg?.HapticFeedback?.notificationOccurred('success')}catch(e){tg?.showAlert('Buyurtmani yuborishda xatolik.');if(!tg)alert('Buyurtmani yuborishda xatolik.')}finally{document.querySelector('#next').disabled=false}};
-document.querySelector('#back').onclick=()=>{if(s.i){s.i--;render()}};render();
+const tg = window.Telegram?.WebApp;
+
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor?.('#1f7a4d');
+  tg.setBackgroundColor?.('#fbfaf7');
+}
+
+const state = {
+  i: 0,
+  who: '',
+  goal: '',
+  cal: '',
+  meal: '',
+  table: '',
+  location: null,
+  pay: 'card'
+};
+
+const screens = [...document.querySelectorAll('.screen')];
+const title = document.querySelector('#title');
+const sub = document.querySelector('#subtitle');
+const step = document.querySelector('#step');
+const next = document.querySelector('#next');
+const back = document.querySelector('#back');
+const flow = document.querySelector('#flow');
+
+const titles = [
+  'Xush kelibsiz!',
+  'Kim uchun?',
+  'Maqsadingiz nima?',
+  'Kunlik kaloriya',
+  'Ovqatlanish turi',
+  'Yetkazib berish',
+  'Buyurtmangiz'
+];
+
+const subs = [
+  'Siz uchun qulay va foydali ovqatlanish rejasini tanlang.',
+  'Buyurtma kim uchun ekanini belgilang.',
+  'Maqsadingizga mos variantni tanlang.',
+  'Kunlik kaloriya miqdorini tanlang.',
+  'Ovqatlanish turini tanlang.',
+  'Stol raqami va joylashuvni kiriting.',
+  'Buyurtma ma’lumotlarini tekshiring.'
+];
+
+function render() {
+  screens.forEach((screen, index) => {
+    screen.classList.toggle('active', index === state.i);
+  });
+
+  title.textContent = titles[state.i] || 'Buyurtma';
+  sub.textContent = subs[state.i] || '';
+  step.textContent = (state.i + 1) + ' / 7';
+
+  back.classList.toggle('hidden', state.i === 0);
+  next.textContent = state.i === 6 ? 'Buyurtma berish' : 'Davom etish';
+
+  if (state.i === 6) summary();
+}
+
+function select(selector, key, value) {
+  document.querySelectorAll(selector).forEach(el => {
+    el.classList.toggle('selected', el.dataset[key] === value);
+  });
+}
+
+document.querySelectorAll('[data-who]').forEach(el => {
+  el.addEventListener('click', () => {
+    state.who = el.dataset.who;
+    select('[data-who]', 'who', state.who);
+    document.querySelector('#recipient').classList.toggle('hidden', state.who !== 'other');
+  });
+});
+
+document.querySelectorAll('[data-goal]').forEach(el => {
+  el.addEventListener('click', () => {
+    state.goal = el.dataset.goal;
+    select('[data-goal]', 'goal', state.goal);
+  });
+});
+
+document.querySelectorAll('[data-cal]').forEach(el => {
+  el.addEventListener('click', () => {
+    state.cal = el.dataset.cal;
+    select('[data-cal]', 'cal', state.cal);
+  });
+});
+
+document.querySelectorAll('[data-meal]').forEach(el => {
+  el.addEventListener('click', () => {
+    state.meal = el.dataset.meal;
+    select('[data-meal]', 'meal', state.meal);
+  });
+});
+
+document.querySelectorAll('[data-pay]').forEach(el => {
+  el.addEventListener('click', () => {
+    state.pay = el.dataset.pay;
+    select('[data-pay]', 'pay', state.pay);
+  });
+});
+
+document.querySelector('#loc')?.addEventListener('click', () => {
+  const status = document.querySelector('#locStatus');
+
+  if (!navigator.geolocation) {
+    status.textContent = 'Geolokatsiya mavjud emas.';
+    return;
+  }
+
+  status.textContent = 'Aniqlanmoqda...';
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      state.location = {
+        lat: pos.coords.latitude,
+        lon: pos.coords.longitude
+      };
+      status.textContent = '✓ Joylashuv aniqlandi';
+    },
+    () => {
+      status.textContent = 'Joylashuvga ruxsat berilmadi.';
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+function validate() {
+  if (state.i === 0) {
+    const name = document.querySelector('#name')?.value.trim();
+    const surname = document.querySelector('#surname')?.value.trim();
+    const phone = document.querySelector('#phone')?.value.trim();
+
+    if (!name || !surname || !phone) {
+      return 'Ism, familiya va telefon raqamingizni kiriting.';
+    }
+  }
+
+  if (state.i === 1 && !state.who) return 'Kim uchun buyurtma ekanini tanlang.';
+
+  if (state.i === 1 && state.who === 'other') {
+    const recipient = document.querySelector('#recipientPhone')?.value.trim();
+    if (!recipient) return 'Qabul qiluvchining telefon raqamini kiriting.';
+  }
+
+  if (state.i === 2 && !state.goal) return 'Maqsadni tanlang.';
+  if (state.i === 3 && !state.cal) return 'Kaloriyani tanlang.';
+  if (state.i === 4 && !state.meal) return 'Ovqatlanish turini tanlang.';
+
+  if (state.i === 5) {
+    state.table = document.querySelector('#table')?.value.trim();
+    if (!state.table) return 'Stol raqamini kiriting.';
+  }
+
+  return '';
+}
+
+function showError(message) {
+  if (tg?.showAlert) tg.showAlert(message);
+  else window.alert(message);
+}
+
+function summary() {
+  const goalText = {
+    loss: 'Vazn tashlash',
+    form: 'Formani saqlash',
+    gain: 'Vazn yig‘ish'
+  };
+
+  const html = [
+    ['Mijoz', `${document.querySelector('#name')?.value || ''} ${document.querySelector('#surname')?.value || ''}`],
+    ['Telefon', document.querySelector('#phone')?.value || ''],
+    ['Kim uchun', state.who === 'other' ? 'Boshqaga' : 'O‘zimga'],
+    ['Maqsad', goalText[state.goal] || ''],
+    ['Kaloriya', state.cal === 'individual' ? 'Individual' : (state.cal ? state.cal + ' kcal' : '')],
+    ['Menyu', state.meal === 'individual' ? 'Individual' : 'Standart'],
+    ['Stol', state.table || '']
+  ];
+
+  document.querySelector('#summary').innerHTML = html
+    .map(([key, value]) => `<div class="sum"><span>${key}</span><b>${value}</b></div>`)
+    .join('');
+}
+
+async function submitOrder() {
+  const payload = {
+    name: document.querySelector('#name')?.value.trim(),
+    surname: document.querySelector('#surname')?.value.trim(),
+    phone: document.querySelector('#phone')?.value.trim(),
+    recipientPhone: document.querySelector('#recipientPhone')?.value.trim() || null,
+    forWho: state.who,
+    goal: state.goal,
+    calories: state.cal,
+    meal: state.meal,
+    table: state.table,
+    location: state.location,
+    payment: state.pay,
+    telegramInitData: tg?.initData || null
+  };
+
+  const api = window.LIFE_FOOD_API || '';
+
+  if (api) {
+    const response = await fetch(api.replace(/\/$/, '') + '/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) throw new Error('ORDER_FAILED');
+  }
+}
+
+async function continueFlow(event) {
+  if (event) event.preventDefault();
+
+  const error = validate();
+  if (error) {
+    showError(error);
+    return false;
+  }
+
+  if (state.i < 6) {
+    state.i += 1;
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return false;
+  }
+
+  next.disabled = true;
+
+  try {
+    await submitOrder();
+
+    flow.classList.add('hidden');
+    document.querySelector('.hero')?.classList.add('hidden');
+    document.querySelector('#success')?.classList.remove('hidden');
+
+    tg?.HapticFeedback?.notificationOccurred?.('success');
+  } catch (error) {
+    showError('Buyurtmani yuborishda xatolik yuz berdi.');
+  } finally {
+    next.disabled = false;
+  }
+
+  return false;
+}
+
+next.addEventListener('click', continueFlow);
+flow.addEventListener('submit', continueFlow);
+
+back.addEventListener('click', event => {
+  event.preventDefault();
+  if (state.i > 0) {
+    state.i -= 1;
+    render();
+  }
+});
+
+render();

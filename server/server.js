@@ -204,6 +204,52 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
+app.get('/api/telegram/webhook/setup', async (req, res) => {
+  const setupSecret = process.env.TELEGRAM_WEBHOOK_SETUP_SECRET || '';
+  if (!setupSecret || req.query.secret !== setupSecret) {
+    return res.status(401).json({ error: 'INVALID_WEBHOOK_SETUP_SECRET' });
+  }
+
+  if (!botToken) {
+    return res.status(503).json({ error: 'BOT_TOKEN_MISSING' });
+  }
+
+  const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL ||
+    'https://life-food-phi.vercel.app/api/telegram/webhook';
+  const secretToken = webhookSecret || setupSecret;
+
+  try {
+    const response = await fetch('https://api.telegram.org/bot' + botToken + '/setWebhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: webhookUrl,
+        secret_token: secretToken,
+        allowed_updates: ['message'],
+        drop_pending_updates: false
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      return res.status(502).json({
+        error: 'TELEGRAM_SET_WEBHOOK_FAILED',
+        telegram: data
+      });
+    }
+
+    return res.json({
+      ok: true,
+      webhookUrl,
+      description: data.result
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'WEBHOOK_SETUP_ERROR' });
+  }
+});
+
 app.post('/api/telegram/webhook', async (req, res) => {
   const incomingSecret = req.get('X-Telegram-Bot-Api-Secret-Token') || '';
 

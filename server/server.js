@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import crypto from 'node:crypto';
 import pg from 'pg';
-import { registerLocationRoutes, startLocationBot } from './locationBot.js';
+import { getProfileByTelegramId, registerLocationRoutes, startLocationBot } from './locationBot.js';
 
 const { Pool } = pg;
 const app = express();
@@ -73,9 +73,16 @@ app.get('/api/profile', async (req, res) => {
   if (!tgUser) return res.status(401).json({ error: 'INVALID_TELEGRAM_DATA' });
 
   if (!pool) {
+    const profile = getProfileByTelegramId(tgUser.id);
     return res.json({
       ok: true,
-      profile: {
+      profile: profile ? {
+        telegramUserId: profile.telegramUserId,
+        name: profile.name || tgUser.first_name || '',
+        surname: profile.surname || tgUser.last_name || '',
+        phone: profile.phone || null,
+        location: profile.location || null
+      } : {
         telegramUserId: tgUser.id,
         name: tgUser.first_name || '',
         surname: tgUser.last_name || '',
@@ -124,13 +131,13 @@ app.post('/api/orders', async (req, res) => {
       return res.status(503).json({ error: 'DATABASE_NOT_CONFIGURED' });
     }
 
-    let profile = null;
+    let profile = tgUser ? getProfileByTelegramId(tgUser.id) : null;
     if (pool && tgUser) {
       const { rows } = await pool.query(
         'SELECT name, surname, phone FROM profiles WHERE telegram_user_id = $1 LIMIT 1',
         [tgUser.id]
       );
-      profile = rows[0] || null;
+      profile = rows[0] || profile;
     }
 
     const createdAt = new Date().toISOString();

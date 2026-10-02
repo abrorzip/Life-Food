@@ -19,7 +19,9 @@ const state = {
   location: null,
   savedLocation: null,
   pay: 'card',
-  profile: null
+  profile: null,
+  orders: [],
+  ordersLoaded: false
 };
 
 const screens = [...document.querySelectorAll('.screen')];
@@ -96,15 +98,29 @@ function render() {
 }
 
 
-function localOrders() {
-  try { return JSON.parse(localStorage.getItem('life_food_orders') || '[]'); }
-  catch { return []; }
-}
+async function loadOrders() {
+  const api = apiBase();
+  if (!api || !tg?.initData) {
+    state.orders = [];
+    state.ordersLoaded = true;
+    renderDashboard();
+    return;
+  }
 
-function saveLocalOrder(order) {
-  const orders = localOrders();
-  orders.unshift(order);
-  localStorage.setItem('life_food_orders', JSON.stringify(orders.slice(0, 20)));
+  try {
+    const response = await fetch(api + '/api/orders', {
+      headers: { 'X-Telegram-Init-Data': tg.initData },
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error('ORDERS_LOAD_FAILED');
+    const data = await response.json();
+    state.orders = Array.isArray(data.orders) ? data.orders : [];
+  } catch {
+    state.orders = [];
+  } finally {
+    state.ordersLoaded = true;
+    renderDashboard();
+  }
 }
 
 function dashboardProfileName() {
@@ -113,7 +129,8 @@ function dashboardProfileName() {
 }
 
 function renderDashboard() {
-  const orders = localOrders();
+  const orders = state.orders || [];
+
   const name = dashboardProfileName();
   if (dashName) dashName.textContent = name.split(' ')[0] || 'Mijoz';
   if (ordersCount) ordersCount.textContent = String(orders.length);
@@ -446,13 +463,7 @@ async function continueFlow(event) {
   next.disabled = true;
   try {
     await submitOrder();
-    saveLocalOrder({
-      calories: state.cal,
-      goal: state.goal,
-      meal: state.meal,
-      durationDays: Number(state.duration),
-      createdAt: new Date().toISOString()
-    });
+    await loadOrders();
     flow.classList.add('hidden');
     document.querySelector('.intro')?.classList.add('hidden');
     document.querySelector('#success')?.classList.remove('hidden');
@@ -492,3 +503,4 @@ setProfileChip();
 render();
 handleLocationRequestFromUrl();
 loadProfile();
+loadOrders();

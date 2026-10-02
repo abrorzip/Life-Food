@@ -2,14 +2,14 @@ import 'dotenv/config';
 import express from 'express';
 import crypto from 'node:crypto';
 import pg from 'pg';
-import { getProfileByTelegramId, registerLocationRoutes, startLocationBot } from './locationBot.js';
+import { getProfileByTelegramId, registerLocationRoutes, startLocationBot, handleUpdate } from './locationBot.js';
 
 const { Pool } = pg;
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Init-Data');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Init-Data, X-Telegram-Bot-Api-Secret-Token');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -17,6 +17,7 @@ app.use((req, res, next) => {
 
 const demoMode = process.env.DEMO_MODE === 'true';
 const botToken = process.env.BOT_TOKEN || '';
+const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 
 const pool = process.env.DATABASE_URL
   ? new Pool({
@@ -64,7 +65,8 @@ app.get('/api/health', (_req, res) => {
     service: 'life-food-api',
     database: Boolean(pool),
     demoMode,
-    botConfigured: Boolean(botToken)
+    botConfigured: Boolean(botToken),
+    webhookMode: Boolean(process.env.VERCEL)
   });
 });
 
@@ -189,11 +191,30 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
+app.post('/api/telegram/webhook', async (req, res) => {
+  const incomingSecret = req.get('X-Telegram-Bot-Api-Secret-Token') || '';
+  if (webhookSecret && incomingSecret !== webhookSecret) {
+    return res.status(401).json({ error: 'INVALID_WEBHOOK_SECRET' });
+  }
+
+  try {
+    await handleUpdate(req.body);
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Telegram webhook error:', error);
+    return res.status(500).json({ error: 'TELEGRAM_WEBHOOK_ERROR' });
+  }
+});
+
 registerLocationRoutes(app);
 
-const port = Number(process.env.PORT || 3000);
-app.listen(port, () => {
-  console.log('Life Food API listening on ' + port);
-  if (!pool && demoMode) console.log('Demo mode: database is OFF.');
-  startLocationBot();
-});
+if (!process.env.VERCEL) {
+  const port = Number(process.env.PORT || 3000);
+  app.listen(port, () => {
+    console.log('Life Food API listening on ' + port);
+    if (!pool && demoMode) console.log('Demo mode: database is OFF.');
+    startLocationBot();
+  });
+}
+
+export default app;

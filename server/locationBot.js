@@ -237,6 +237,8 @@ async function handleUpdate(update) {
   }
 }
 
+export { handleUpdate };
+
 export function registerLocationRoutes(app) {
   app.post('/api/location/request', async (req, res) => {
     try {
@@ -291,7 +293,7 @@ export function getProfileByTelegramId(userId) {
 }
 
 export async function startLocationBot() {
-  if (pollingStarted || !botToken || !miniAppUrl || !pollingEnabled) return;
+  if (pollingStarted || !botToken || !miniAppUrl || !pollingEnabled || process.env.VERCEL) return;
   pollingStarted = true;
 
   try {

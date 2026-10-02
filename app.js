@@ -8,6 +8,7 @@ if (tg) {
 }
 
 const state = {
+  view: 'dashboard',
   i: 0,
   who: '',
   goal: '',
@@ -36,6 +37,17 @@ const locCurrent = document.querySelector('#locCurrent');
 const locStatus = document.querySelector('#locStatus');
 const apiBase = () => (window.LIFE_FOOD_API || '').replace(/\/$/, '');
 
+const progressWrap = document.querySelector('.progress-wrap');
+const dashboard = document.querySelector('#dashboard');
+const dashboardPanel = document.querySelector('#dashboardPanel');
+const dashName = document.querySelector('#dashName');
+const ordersCount = document.querySelector('#ordersCount');
+const bonusAmount = document.querySelector('#bonusAmount');
+const favoriteTitle = document.querySelector('#favoriteTitle');
+const favoriteMeta = document.querySelector('#favoriteMeta');
+const repeatOrder = document.querySelector('#repeatOrder');
+
+
 const steps = [
   ['Kim uchun buyurtma?', 'Siz uchun yoki yaqin insoningiz uchun sog‘lom menyuni tanlang.'],
   ['Maqsadingiz nima?', 'Ratsionni maqsadingizga mos tanlang.'],
@@ -58,6 +70,19 @@ function setProfileChip() {
 }
 
 function render() {
+  if (state.view !== 'order') {
+    dashboard?.classList.remove('hidden');
+    flow.classList.add('hidden');
+    progressWrap?.classList.add('hidden');
+    document.querySelector('.intro')?.classList.add('hidden');
+    back.classList.add('hidden');
+    renderDashboard();
+    return;
+  }
+  dashboard?.classList.add('hidden');
+  flow.classList.remove('hidden');
+  progressWrap?.classList.remove('hidden');
+  document.querySelector('.intro')?.classList.remove('hidden');
   screens.forEach((screen, index) => screen.classList.toggle('active', index === state.i));
   const [heading, copy] = steps[state.i];
   title.textContent = heading;
@@ -68,6 +93,125 @@ function render() {
   back.classList.toggle('hidden', state.i === 0);
   nextText.textContent = state.i === steps.length - 1 ? 'Buyurtmani tasdiqlash' : 'Davom etish';
   if (state.i === 6) summary();
+}
+
+
+function localOrders() {
+  try { return JSON.parse(localStorage.getItem('life_food_orders') || '[]'); }
+  catch { return []; }
+}
+
+function saveLocalOrder(order) {
+  const orders = localOrders();
+  orders.unshift(order);
+  localStorage.setItem('life_food_orders', JSON.stringify(orders.slice(0, 20)));
+}
+
+function dashboardProfileName() {
+  const u = tg?.initDataUnsafe?.user;
+  return [u?.first_name, u?.last_name].filter(Boolean).join(' ') || state.profile?.name || 'Mijoz';
+}
+
+function renderDashboard() {
+  const orders = localOrders();
+  const name = dashboardProfileName();
+  if (dashName) dashName.textContent = name.split(' ')[0] || 'Mijoz';
+  if (ordersCount) ordersCount.textContent = String(orders.length);
+  if (bonusAmount) bonusAmount.textContent = '0 so‘m';
+
+  const latest = orders[0];
+  if (latest) {
+    const kcal = latest.calories === 'individual' ? 'Individual' : latest.calories + ' kcal';
+    favoriteTitle.textContent = kcal + ' · ' + latest.durationDays + ' kun';
+    favoriteMeta.textContent = (latest.meal === 'individual' ? 'Individual menyu' : 'Standart menyu') + ' · ' + (goalText[latest.goal] || 'Shaxsiy tanlov');
+    repeatOrder.classList.remove('hidden');
+  } else {
+    favoriteTitle.textContent = 'Hali tanlov yo‘q';
+    favoriteMeta.textContent = 'Birinchi buyurtmangizdan keyin shu yerda ko‘rinadi.';
+    repeatOrder.classList.add('hidden');
+  }
+
+  dashboardPanel?.classList.add('hidden');
+  const panelMode = window.__lifeFoodPanel || '';
+  if (!panelMode) return;
+
+  dashboardPanel.classList.remove('hidden');
+
+  if (panelMode === 'profile') {
+    dashboardPanel.innerHTML = '<div class="panel-head"><strong>Profil</strong><button type="button" class="panel-close" data-panel-close>×</button></div>' +
+      '<div class="panel-body profile-panel">' +
+      '<div class="profile-row"><span>Ism</span><strong>' + escapeHtml(state.profile?.name || tg?.initDataUnsafe?.user?.first_name || '—') + '</strong></div>' +
+      '<div class="profile-row"><span>Familiya</span><strong>' + escapeHtml(state.profile?.surname || tg?.initDataUnsafe?.user?.last_name || '—') + '</strong></div>' +
+      '<div class="profile-row"><span>Telefon</span><strong>' + escapeHtml(state.profile?.phone || '—') + '</strong></div>' +
+      '<div class="profile-row"><span>Lokatsiya</span><strong>' + ((state.profile?.location || state.savedLocation) ? 'Saqlangan' : 'Kiritilmagan') + '</strong></div>' +
+      '</div>';
+  } else if (panelMode === 'referral') {
+    const userId = tg?.initDataUnsafe?.user?.id;
+    const botUsername = String(window.LIFE_FOOD_BOT_USERNAME || '').replace(/^@/, '');
+    const link = userId && botUsername ? 'https://t.me/' + botUsername + '?start=ref_' + encodeURIComponent(String(userId)) : '';
+    dashboardPanel.innerHTML = '<div class="panel-head"><strong>Referral</strong><button type="button" class="panel-close" data-panel-close>×</button></div>' +
+      '<div class="referral-detail">' +
+      '<div class="referral-balance"><span><small>Bonus balansi</small><strong>0 so‘m</strong></span><span><small>Muvaffaqiyatli taklif</small><strong>0</strong></span></div>' +
+      '<div class="ref-link">' + escapeHtml(link || 'Bot username sozlangandan keyin shaxsiy referral havola shu yerda chiqadi.') + '</div>' +
+      '<button type="button" class="share-btn" id="shareReferral">🔗 Havolani ulashish</button>' +
+      '</div>';
+  } else {
+    dashboardPanel.innerHTML = '<div class="panel-head"><strong>Buyurtmalarim</strong><button type="button" class="panel-close" data-panel-close>×</button></div>' +
+      '<div class="panel-body">' +
+      (orders.length ? orders.map((o,idx) =>
+        '<div class="panel-order"><div><strong>#' + (orders.length - idx) + '</strong><small>' +
+        escapeHtml(o.calories === 'individual' ? 'Individual kcal' : o.calories + ' kcal') + ' · ' + o.durationDays + ' kun · ' +
+        escapeHtml(o.meal === 'individual' ? 'Individual' : 'Standart') +
+        '</small></div><b>Yangi</b></div>'
+      ).join('') : '<div class="panel-order"><div><strong>Hozircha buyurtma yo‘q</strong><small>Birinchi buyurtmangiz shu yerda ko‘rinadi.</small></div></div>') +
+      '</div>';
+  }
+
+  dashboardPanel.querySelector('[data-panel-close]')?.addEventListener('click', showDashboard);
+  dashboardPanel.querySelector('#shareReferral')?.addEventListener('click', shareReferral);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
+}
+
+function showDashboard() {
+  state.view = 'dashboard';
+  window.__lifeFoodPanel = '';
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.nav === 'home'));
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showPanel(mode) {
+  state.view = 'dashboard';
+  window.__lifeFoodPanel = mode;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.nav === mode));
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function startOrder() {
+  state.view = 'order';
+  window.__lifeFoodPanel = '';
+  state.i = 0;
+  document.querySelector('#success')?.classList.add('hidden');
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function shareReferral() {
+  const userId = tg?.initDataUnsafe?.user?.id;
+  const botUsername = String(window.LIFE_FOOD_BOT_USERNAME || '').replace(/^@/, '');
+  if (!userId || !botUsername) {
+    showError('Referral havolasi uchun bot username sozlanishi kerak.');
+    return;
+  }
+  const link = 'https://t.me/' + botUsername + '?start=ref_' + encodeURIComponent(String(userId));
+  const text = 'LIFE FOOD bilan sog‘lom ovqatlanishni boshlang 🌿';
+  const shareUrl = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
+  if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
+  else window.open(shareUrl, '_blank');
 }
 
 function select(selector, key, value) {
@@ -302,6 +446,13 @@ async function continueFlow(event) {
   next.disabled = true;
   try {
     await submitOrder();
+    saveLocalOrder({
+      calories: state.cal,
+      goal: state.goal,
+      meal: state.meal,
+      durationDays: Number(state.duration),
+      createdAt: new Date().toISOString()
+    });
     flow.classList.add('hidden');
     document.querySelector('.intro')?.classList.add('hidden');
     document.querySelector('#success')?.classList.remove('hidden');
@@ -318,12 +469,24 @@ flow.addEventListener('submit', continueFlow);
 
 back.addEventListener('click', event => {
   event.preventDefault();
-  if (state.i > 0) {
-    state.i -= 1;
-    render();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (state.i === 0) {
+    showDashboard();
+    return;
   }
+  state.i -= 1;
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
+
+document.querySelector('#startOrder')?.addEventListener('click', startOrder);
+document.querySelector('#ordersCard')?.addEventListener('click', () => showPanel('orders'));
+document.querySelector('#bonusCard')?.addEventListener('click', () => showPanel('referral'));
+document.querySelector('#referralCard')?.addEventListener('click', () => showPanel('referral'));
+document.querySelector('#repeatOrder')?.addEventListener('click', startOrder);
+document.querySelectorAll('[data-nav]').forEach(el => el.addEventListener('click', () => {
+  if (el.dataset.nav === 'home') showDashboard();
+  else showPanel(el.dataset.nav);
+}));
 
 setProfileChip();
 render();

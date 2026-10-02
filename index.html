@@ -28,6 +28,69 @@
       </div>
     </header>
 
+
+    <section id="dashboard" class="dashboard">
+      <div class="dashboard-hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="eyebrow-dot"></span>LIFE FOOD</div>
+          <h1>Salom, <span id="dashName">Mijoz</span> 👋</h1>
+          <p>Bugun o‘zingiz uchun foydali tanlov qiling.</p>
+        </div>
+        <div class="hero-orbit"><span>LF</span></div>
+      </div>
+
+      <button type="button" id="startOrder" class="order-hero-card">
+        <div>
+          <span class="order-label">ASOSIY XIZMAT</span>
+          <strong>Yangi buyurtma</strong>
+          <small>Sog‘lom menyuni o‘zingizga moslang</small>
+        </div>
+        <span class="order-cta">→</span>
+      </button>
+
+      <div class="dashboard-grid">
+        <button type="button" id="ordersCard" class="stat-card">
+          <span class="stat-icon">▣</span>
+          <span class="stat-label">BUYURTMALARIM</span>
+          <strong id="ordersCount">0</strong>
+          <small>Saqlangan buyurtmalar</small>
+        </button>
+        <button type="button" id="bonusCard" class="stat-card">
+          <span class="stat-icon">✦</span>
+          <span class="stat-label">BONUSLARIM</span>
+          <strong id="bonusAmount">0 so‘m</strong>
+          <small>Referral bonusi</small>
+        </button>
+      </div>
+
+      <button type="button" id="referralCard" class="referral-card">
+        <div class="referral-icon">🎁</div>
+        <div class="referral-copy">
+          <span>DO‘STINGIZNI TAKLIF QILING</span>
+          <strong>10 000 so‘m bonus</strong>
+          <small>Do‘stingiz birinchi buyurtmasini amalga oshirganda</small>
+        </div>
+        <span class="chevron">›</span>
+      </button>
+
+      <div class="favorite-card">
+        <div>
+          <span class="stat-label">SIZ UCHUN</span>
+          <strong id="favoriteTitle">Hali tanlov yo‘q</strong>
+          <small id="favoriteMeta">Birinchi buyurtmangizdan keyin shu yerda ko‘rinadi.</small>
+        </div>
+        <button type="button" id="repeatOrder" class="mini-action hidden">Qayta buyurtma</button>
+      </div>
+
+      <div id="dashboardPanel" class="dashboard-panel hidden"></div>
+
+      <nav class="bottom-nav" id="bottomNav" aria-label="Asosiy navigatsiya">
+        <button type="button" data-nav="home" class="nav-item active"><span>⌂</span><small>Bosh sahifa</small></button>
+        <button type="button" data-nav="orders" class="nav-item"><span>▣</span><small>Buyurtmalar</small></button>
+        <button type="button" data-nav="profile" class="nav-item"><span>◉</span><small>Profil</small></button>
+      </nav>
+    </section>
+
     <div class="progress-wrap" aria-label="Buyurtma jarayoni">
       <div class="progress-meta">
         <span id="stepLabel">1-bosqich</span>

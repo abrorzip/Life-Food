@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { FieldValue } from 'firebase-admin/firestore';
+import { getDb } from './firebase.js';
 
 const botToken = process.env.BOT_TOKEN || '';
 const miniAppUrl = process.env.MINI_APP_URL || '';
@@ -9,13 +11,24 @@ let botUsername = configuredBotUsername;
 let identityPromise = null;
 let pollingStarted = false;
 
-const profiles = new Map();
-const requests = new Map();
-const pendingFlowByUser = new Map();
-const pendingLocationByUser = new Map();
+function userRef(userId) {
+  return getDb().collection('profiles').doc(String(userId));
+}
+
+function requestRef(requestId) {
+  return getDb().collection('locationRequests').doc(String(requestId));
+}
+
+function serializeTimestamp(value) {
+  if (!value) return null;
+  if (typeof value.toDate === 'function') return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
 
 function validateTelegramInitData(initData) {
   if (!initData || !botToken) return null;
+
   const params = new URLSearchParams(initData);
   const hash = params.get('hash');
   if (!hash) return null;
@@ -29,16 +42,22 @@ function validateTelegramInitData(initData) {
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
   const calculated = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
-  if (calculated.length !== hash.length || !crypto.timingSafeEqual(Buffer.from(calculated), Buffer.from(hash))) return null;
+  if (calculated.length !== hash.length ||
+      !crypto.timingSafeEqual(Buffer.from(calculated), Buffer.from(hash))) return null;
 
   const authDate = Number(params.get('auth_date'));
   if (!authDate || Date.now() / 1000 - authDate > 86400) return null;
 
-  try { return JSON.parse(params.get('user') || ''); } catch { return null; }
+  try {
+    return JSON.parse(params.get('user') || '');
+  } catch {
+    return null;
+  }
 }
 
 async function telegramRequest(method, payload = {}) {
   if (!botToken) throw new Error('BOT_TOKEN_MISSING');
+
   const response = await fetch(
     'https://api.telegram.org/bot' + botToken + '/' + method,
     {
@@ -47,6 +66,7 @@ async function telegramRequest(method, payload = {}) {
       body: JSON.stringify(payload)
     }
   );
+
   const data = await response.json();
   if (!response.ok || !data.ok) throw new Error('TELEGRAM_' + method + '_FAILED');
   return data.result;
@@ -54,20 +74,34 @@ async function telegramRequest(method, payload = {}) {
 
 async function ensureBotIdentity() {
   if (botUsername) return botUsername;
+
   if (!identityPromise) {
     identityPromise = telegramRequest('getMe')
-      .then(me => { botUsername = me.username; return botUsername; })
-      .catch(error => { identityPromise = null; throw error; });
+      .then(me => {
+        botUsername = me.username;
+        return botUsername;
+      })
+      .catch(error => {
+        identityPromise = null;
+        throw error;
+      });
   }
+
   return identityPromise;
 }
 
 async function sendMessage(chatId, text, replyMarkup) {
-  return telegramRequest('sendMessage', { chat_id: chatId, text, reply_markup: replyMarkup });
+  return telegramRequest('sendMessage', {
+    chat_id: chatId,
+    text,
+    reply_markup: replyMarkup
+  });
 }
 
 function miniAppReturnUrl(requestId) {
-  return miniAppUrl + (miniAppUrl.includes('?') ? '&' : '?') + 'location_request=' + encodeURIComponent(requestId);
+  return miniAppUrl +
+    (miniAppUrl.includes('?') ? '&' : '?') +
+    'location_request=' + encodeURIComponent(requestId);
 }
 
 function locationKeyboard() {
@@ -88,39 +122,48 @@ function contactKeyboard() {
 
 function miniAppKeyboard() {
   return {
-    inline_keyboard: [[{ text: '🍱 Buyurtma berish', web_app: { url: miniAppUrl } }]]
+    inline_keyboard: [[{
+      text: '🍱 Buyurtma berish',
+      web_app: { url: miniAppUrl }
+    }]]
   };
 }
 
-function cleanup() {
-  const now = Date.now();
-  for (const [id, request] of requests) {
-    if (now - request.createdAt > 10 * 60 * 1000) requests.delete(id);
-  }
-  for (const [userId, profile] of profiles) {
-    if (profile.createdAt && now - profile.createdAt > 24 * 60 * 60 * 1000) {
-      profiles.delete(userId);
-    }
-  }
+async function getProfile(userId) {
+  const snapshot = await userRef(userId).get();
+  return snapshot.exists ? snapshot.data() : null;
 }
-setInterval(cleanup, 60 * 1000).unref();
+
+async function saveProfile(userId, data) {
+  await userRef(userId).set({
+    telegramUserId: Number(userId),
+    ...data,
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+}
 
 async function startRegistration(chatId, userId, from) {
-  const existing = profiles.get(String(userId));
+  const existing = await getProfile(userId);
+
   if (existing?.complete) {
-    await sendMessage(chatId, 'Profilingiz tayyor. LIFE FOOD buyurtmasini Mini App orqali bering.', miniAppKeyboard());
+    await sendMessage(
+      chatId,
+      'Profilingiz tayyor. LIFE FOOD buyurtmasini Mini App orqali bering.',
+      miniAppKeyboard()
+    );
     return;
   }
 
-  profiles.set(String(userId), {
-    telegramUserId: userId,
+  await saveProfile(userId, {
     name: '',
     surname: '',
     phone: null,
     location: null,
     state: 'name',
-    createdAt: Date.now(),
-    telegramName: from?.first_name || ''
+    complete: false,
+    pendingLocationRequestId: null,
+    telegramName: from?.first_name || '',
+    createdAt: existing?.createdAt || FieldValue.serverTimestamp()
   });
 
   await sendMessage(chatId, 'Assalomu alaykum! 👋\n\nLIFE FOOD uchun profil ochamiz.\nIsmingizni yozing.');
@@ -132,7 +175,6 @@ async function handleUpdate(update) {
 
   const chatId = message.chat.id;
   const userId = message.from.id;
-  const key = String(userId);
   const text = String(message.text || '').trim();
 
   if (text.startsWith('/start')) {
@@ -140,13 +182,24 @@ async function handleUpdate(update) {
 
     if (startParam.startsWith('loc_')) {
       const requestId = startParam.slice(4);
-      const request = requests.get(requestId);
-      if (!request || request.userId !== userId || request.status !== 'pending') {
+      const requestSnapshot = await requestRef(requestId).get();
+      const request = requestSnapshot.exists ? requestSnapshot.data() : null;
+
+      if (!request ||
+          Number(request.userId) !== Number(userId) ||
+          request.status !== 'pending' ||
+          (request.expiresAt?.toMillis && request.expiresAt.toMillis() < Date.now())) {
         await sendMessage(chatId, 'Bu lokatsiya so‘rovi topilmadi yoki muddati tugagan.');
         return;
       }
-      pendingLocationByUser.set(key, requestId);
-      await sendMessage(chatId, '📍 Yangi yetkazib berish lokatsiyangizni yuboring.', locationKeyboard());
+
+      await saveProfile(userId, { pendingLocationRequestId: requestId });
+
+      await sendMessage(
+        chatId,
+        '📍 Yangi yetkazib berish lokatsiyangizni yuboring.',
+        locationKeyboard()
+      );
       return;
     }
 
@@ -154,38 +207,65 @@ async function handleUpdate(update) {
     return;
   }
 
-  const profile = profiles.get(key);
+  const profile = await getProfile(userId);
 
   if (message.contact) {
     if (!profile || profile.state !== 'phone') {
       await sendMessage(chatId, 'Avval /start orqali registratsiyani boshlang.');
       return;
     }
-    if (message.contact.user_id && Number(message.contact.user_id) !== userId) {
+
+    if (message.contact.user_id && Number(message.contact.user_id) !== Number(userId)) {
       await sendMessage(chatId, 'Iltimos, aynan o‘zingizning Telegram raqamingizni yuboring.');
       return;
     }
-    profile.phone = message.contact.phone_number;
-    profile.state = 'location';
+
+    await saveProfile(userId, {
+      phone: message.contact.phone_number,
+      state: 'location'
+    });
+
     await sendMessage(chatId, 'Rahmat. Endi 📍 manzilingizni yuboring.', locationKeyboard());
     return;
   }
 
   if (message.location) {
-    const pendingRequestId = pendingLocationByUser.get(key);
+    const pendingRequestId = profile?.pendingLocationRequestId;
+
     if (pendingRequestId) {
-      const request = requests.get(pendingRequestId);
-      if (!request || request.userId !== userId || request.status !== 'pending') {
+      const requestSnapshot = await requestRef(pendingRequestId).get();
+      const request = requestSnapshot.exists ? requestSnapshot.data() : null;
+
+      if (!request ||
+          Number(request.userId) !== Number(userId) ||
+          request.status !== 'pending') {
         await sendMessage(chatId, 'Bu lokatsiya so‘rovi topilmadi yoki muddati tugagan.');
         return;
       }
-      request.location = { lat: Number(message.location.latitude), lon: Number(message.location.longitude) };
-      request.status = 'ready';
-      request.updatedAt = Date.now();
-      pendingLocationByUser.delete(key);
-      await sendMessage(chatId, '✅ Lokatsiya qabul qilindi. Mini Appga qaytib, buyurtmani davom ettiring.', {
-        inline_keyboard: [[{ text: '🍱 Mini Appga qaytish', web_app: { url: miniAppReturnUrl(pendingRequestId) } }]]
-      });
+
+      const location = {
+        lat: Number(message.location.latitude),
+        lon: Number(message.location.longitude)
+      };
+
+      await requestRef(pendingRequestId).set({
+        status: 'ready',
+        location,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      await saveProfile(userId, { pendingLocationRequestId: null });
+
+      await sendMessage(
+        chatId,
+        '✅ Lokatsiya qabul qilindi. Mini Appga qaytib, buyurtmani davom ettiring.',
+        {
+          inline_keyboard: [[{
+            text: '🍱 Mini Appga qaytish',
+            web_app: { url: miniAppReturnUrl(pendingRequestId) }
+          }]]
+        }
+      );
       return;
     }
 
@@ -193,12 +273,22 @@ async function handleUpdate(update) {
       await sendMessage(chatId, 'Avval /start orqali registratsiyani boshlang.');
       return;
     }
-    profile.location = { lat: Number(message.location.latitude), lon: Number(message.location.longitude) };
-    profile.state = 'complete';
-    profile.complete = true;
+
+    const location = {
+      lat: Number(message.location.latitude),
+      lon: Number(message.location.longitude)
+    };
+
+    await saveProfile(userId, {
+      location,
+      state: 'complete',
+      complete: true
+    });
+
     await sendMessage(chatId, '✅ Profilingiz tayyor!\n\nEndi LIFE FOOD buyurtmasini Mini App orqali bering.', {
       remove_keyboard: true
     });
+
     await sendMessage(chatId, '🍱 Buyurtmani boshlash', miniAppKeyboard());
     return;
   }
@@ -209,15 +299,19 @@ async function handleUpdate(update) {
   }
 
   if (profile.state === 'name') {
-    profile.name = text;
-    profile.state = 'surname';
+    await saveProfile(userId, {
+      name: text,
+      state: 'surname'
+    });
     await sendMessage(chatId, 'Familiyangizni yozing.');
     return;
   }
 
   if (profile.state === 'surname') {
-    profile.surname = text;
-    profile.state = 'phone';
+    await saveProfile(userId, {
+      surname: text,
+      state: 'phone'
+    });
     await sendMessage(chatId, 'Telefon raqamingizni yuboring.', contactKeyboard());
     return;
   }
@@ -232,7 +326,7 @@ async function handleUpdate(update) {
     return;
   }
 
-  if (pendingLocationByUser.has(key)) {
+  if (profile.pendingLocationRequestId) {
     await sendMessage(chatId, 'Iltimos, Telegram Location yuboring.');
   }
 }
@@ -242,24 +336,44 @@ export { handleUpdate };
 export function registerLocationRoutes(app) {
   app.post('/api/location/request', async (req, res) => {
     try {
-      if (!botToken || !miniAppUrl) return res.status(503).json({ error: 'BOT_LOCATION_FLOW_NOT_CONFIGURED' });
-      const tgUser = validateTelegramInitData(req.body?.telegramInitData);
-      if (!tgUser) return res.status(401).json({ error: 'INVALID_TELEGRAM_DATA' });
-      const username = await ensureBotIdentity();
+      if (!botToken || !miniAppUrl) {
+        return res.status(503).json({ error: 'BOT_LOCATION_FLOW_NOT_CONFIGURED' });
+      }
 
-      const old = pendingLocationByUser.get(String(tgUser.id));
-      if (old) requests.delete(old);
+      const tgUser = validateTelegramInitData(req.body?.telegramInitData);
+      if (!tgUser) {
+        return res.status(401).json({ error: 'INVALID_TELEGRAM_DATA' });
+      }
+
+      const db = getDb();
+      const username = await ensureBotIdentity();
+      const profileRef = userRef(tgUser.id);
+      const profileSnapshot = await profileRef.get();
+      const profile = profileSnapshot.exists ? profileSnapshot.data() : null;
+      const oldRequestId = profile?.pendingLocationRequestId || '';
+
+      if (oldRequestId) {
+        await requestRef(oldRequestId).set({
+          status: 'superseded',
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
 
       const requestId = crypto.randomUUID();
-      requests.set(requestId, {
+
+      await db.collection('locationRequests').doc(requestId).set({
         requestId,
-        userId: tgUser.id,
+        userId: Number(tgUser.id),
         status: 'pending',
         location: null,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000)
       });
-      pendingLocationByUser.set(String(tgUser.id), requestId);
+
+      await saveProfile(tgUser.id, {
+        pendingLocationRequestId: requestId
+      });
 
       return res.json({
         ok: true,
@@ -272,24 +386,53 @@ export function registerLocationRoutes(app) {
     }
   });
 
-  app.get('/api/location/status', (req, res) => {
-    const tgUser = validateTelegramInitData(req.get('X-Telegram-Init-Data'));
-    if (!tgUser) return res.status(401).json({ error: 'INVALID_TELEGRAM_DATA' });
+  app.get('/api/location/status', async (req, res) => {
+    try {
+      const tgUser = validateTelegramInitData(req.get('X-Telegram-Init-Data'));
+      if (!tgUser) {
+        return res.status(401).json({ error: 'INVALID_TELEGRAM_DATA' });
+      }
 
-    const requestId = String(req.query.requestId || '');
-    const request = requests.get(requestId);
-    if (!request || request.userId !== tgUser.id) return res.status(404).json({ error: 'LOCATION_REQUEST_NOT_FOUND' });
+      const requestId = String(req.query.requestId || '');
+      const snapshot = await requestRef(requestId).get();
+      const request = snapshot.exists ? snapshot.data() : null;
 
-    return res.json({ ok: true, status: request.status, location: request.location });
+      if (!request || Number(request.userId) !== Number(tgUser.id)) {
+        return res.status(404).json({ error: 'LOCATION_REQUEST_NOT_FOUND' });
+      }
+
+      if (request.status === 'pending' && request.expiresAt?.toMillis?.() < Date.now()) {
+        await requestRef(requestId).set({
+          status: 'expired',
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        return res.json({ ok: true, status: 'expired', location: null });
+      }
+
+      return res.json({
+        ok: true,
+        status: request.status,
+        location: request.location || null
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'LOCATION_STATUS_ERROR' });
+    }
   });
 
-  app.get('/api/profile/demo', (_req, res) => {
-    res.json({ ok: true, profiles: profiles.size });
+  app.get('/api/profile/demo', async (_req, res) => {
+    try {
+      const snapshot = await getDb().collection('profiles').limit(100).get();
+      return res.json({ ok: true, profiles: snapshot.size });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'PROFILE_COUNT_ERROR' });
+    }
   });
 }
 
-export function getProfileByTelegramId(userId) {
-  return profiles.get(String(userId)) || null;
+export async function getProfileByTelegramId(userId) {
+  return getProfile(userId);
 }
 
 export async function startLocationBot() {
@@ -313,10 +456,14 @@ export async function startLocationBot() {
         timeout: 25,
         allowed_updates: ['message']
       });
+
       for (const update of updates) {
         offset = update.update_id + 1;
-        try { await handleUpdate(update); }
-        catch (error) { console.error('Telegram update error:', error.message); }
+        try {
+          await handleUpdate(update);
+        } catch (error) {
+          console.error('Telegram update error:', error.message);
+        }
       }
     } catch (error) {
       console.error('Telegram polling error:', error.message);

@@ -30,3 +30,27 @@ The frontend API URL can be configured before loading the app:
 - Real menu/pricing data
 
 Do not commit real secrets.
+
+## Bot-assisted location change
+
+The Mini App now supports:
+- current browser GPS location;
+- a **Lokatsiyani o‘zgartirish** button;
+- a short-lived server-side request;
+- Telegram bot prompt with native **📍 Lokatsiyani yuborish**;
+- a **Mini Appga qaytish** button after the bot receives the location.
+
+For the demo, location requests and demo orders are held in memory. No PostgreSQL database is required while `DEMO_MODE=true`.
+
+Backend configuration:
+```env
+BOT_TOKEN=YOUR_BOT_TOKEN
+MINI_APP_URL=https://abrorzip.github.io/Life-Food/
+BOT_POLLING=true
+DEMO_MODE=true
+```
+
+Frontend configuration in `config.js`:
+```js
+window.LIFE_FOOD_API = 'https://your-api.example.com';
+```

@@ -25,6 +25,8 @@ const step = document.querySelector('#step');
 const next = document.querySelector('#next');
 const back = document.querySelector('#back');
 const flow = document.querySelector('#flow');
+const locBot = document.querySelector('#locBot');
+const locStatus = document.querySelector('#locStatus');
 
 const titles = [
   'Xush kelibsiz!',
@@ -128,6 +130,107 @@ document.querySelector('#loc')?.addEventListener('click', () => {
   );
 });
 
+
+function getApiBase() {
+  return (window.LIFE_FOOD_API || '').replace(/\/$/, '');
+}
+
+function startLocationPolling(requestId) {
+  if (!requestId || !tg?.initData) return;
+
+  if (window.__lifeFoodLocationPoll) {
+    clearInterval(window.__lifeFoodLocationPoll);
+  }
+
+  const deadline = Date.now() + 5 * 60 * 1000;
+
+  const check = async () => {
+    if (Date.now() > deadline) {
+      clearInterval(window.__lifeFoodLocationPoll);
+      window.__lifeFoodLocationPoll = null;
+      return;
+    }
+
+    try {
+      const api = getApiBase();
+      if (!api) return;
+
+      const response = await fetch(
+        api + '/api/location/status?requestId=' + encodeURIComponent(requestId),
+        { headers: { 'X-Telegram-Init-Data': tg.initData } }
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      if (data.status === 'ready' && data.location) {
+        state.location = {
+          lat: Number(data.location.lat),
+          lon: Number(data.location.lon)
+        };
+        if (locStatus) locStatus.textContent = '✓ Yangi joylashuv qabul qilindi';
+
+        clearInterval(window.__lifeFoodLocationPoll);
+        window.__lifeFoodLocationPoll = null;
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete('location_request');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      }
+    } catch {
+      // Best-effort polling; user can retry from the button.
+    }
+  };
+
+  check();
+  window.__lifeFoodLocationPoll = setInterval(check, 2000);
+}
+
+locBot?.addEventListener('click', async () => {
+  const api = getApiBase();
+
+  if (!api || !tg?.initData) {
+    showError('Bot orqali lokatsiyani o‘zgartirish uchun Mini App server API bilan ulangan bo‘lishi kerak.');
+    return;
+  }
+
+  locBot.disabled = true;
+  if (locStatus) locStatus.textContent = 'Bot ochilmoqda...';
+
+  try {
+    const response = await fetch(api + '/api/location/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramInitData: tg.initData })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.botUrl || !data.requestId) {
+      throw new Error('LOCATION_REQUEST_FAILED');
+    }
+
+    if (locStatus) locStatus.textContent = 'Botda yangi lokatsiyani yuboring.';
+    startLocationPolling(data.requestId);
+
+    if (tg.openTelegramLink) tg.openTelegramLink(data.botUrl);
+    else window.location.href = data.botUrl;
+  } catch {
+    showError('Lokatsiya o‘zgartirish uchun botni ochib bo‘lmadi.');
+  } finally {
+    locBot.disabled = false;
+  }
+});
+
+function handleLocationRequestFromUrl() {
+  const requestId = new URLSearchParams(window.location.search).get('location_request');
+  if (!requestId || !tg?.initData) return;
+
+  if (locStatus) locStatus.textContent = 'Yangi lokatsiya qabul qilinmoqda...';
+  startLocationPolling(requestId);
+}
+
 function validate() {
   if (state.i === 0) {
     const name = document.querySelector('#name')?.value.trim();
@@ -177,7 +280,8 @@ function summary() {
     ['Maqsad', goalText[state.goal] || ''],
     ['Kaloriya', state.cal === 'individual' ? 'Individual' : (state.cal ? state.cal + ' kcal' : '')],
     ['Menyu', state.meal === 'individual' ? 'Individual' : 'Standart'],
-    ['Stol', state.table || '']
+    ['Stol', state.table || ''],
+    ['Lokatsiya', state.location ? 'Aniqlandi' : 'Tanlanmagan']
   ];
 
   document.querySelector('#summary').innerHTML = html
@@ -226,6 +330,7 @@ async function continueFlow(event) {
   if (state.i < 6) {
     state.i += 1;
     render();
+handleLocationRequestFromUrl();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return false;
   }

@@ -7,6 +7,7 @@
 <title>Life Food</title>
 <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
 <link rel="stylesheet" href="styles.css">
+<script src="config.js"></script>
 </head>
 <body>
 <main id="app">
@@ -38,7 +39,7 @@
 <button type="button" class="choice row" data-meal="standard">🥗 <span><b>Standart menyu</b><small>Tayyor kunlik menyu</small></span></button>
 </div></section>
 <section class="screen"><h2>Yetkazib berish</h2><label>Stol raqami</label><input id="table" inputmode="numeric" required placeholder="Masalan: 12">
-<button type="button" id="loc" class="location">📍 Manzilni aniqlash</button><p id="locStatus">Joylashuv keyingi bosqichda tasdiqlanadi.</p></section>
+<button type="button" id="loc" class="location">📍 Joriy manzilni aniqlash</button><p id="locStatus">Joylashuv keyingi bosqichda tasdiqlanadi.</p><div class="location-actions"><button type="button" id="locBot" class="location secondary">✏️ Lokatsiyani o‘zgartirish</button><small>O‘zgartirish bosilganda bot sizdan yangi Telegram Location yuborishni so‘raydi.</small></div></section>
 <section class="screen"><h2>Buyurtmangiz</h2><div id="summary" class="summary"></div>
 <h3>To‘lov usuli</h3><button type="button" class="pay selected" data-pay="card">💳 Bank karta</button><button type="button" class="pay" data-pay="click">🟦 Click</button></section>
 <div class="actions"><button type="button" id="back" class="back hidden">← Orqaga</button><button class="primary" id="next">Davom etish</button></div>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1f7a4d"><title>Life Food</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main id="app">
+<header class="topbar"><div class="brand">LIFE <span>FOOD</span></div><div id="step">1 / 7</div></header>
+<section class="hero"><p>LIFE FOOD</p><h1 id="title">Xush kelibsiz!</h1><div id="subtitle">Siz uchun qulay va foydali ovqatlanish rejasini tanlang.</div></section>
+<form id="flow">
+<section class="screen active">
+<label>Ismingiz</label><input id="name" required placeholder="Ismingizni kiriting">
+<label>Familiyangiz</label><input id="surname" required placeholder="Familiyangizni kiriting">
+<label>Telefon raqamingiz</label><input id="phone" type="tel" required placeholder="+998 90 123 45 67">
+</section>
+<section class="screen"><h2>Kim uchun?</h2><div class="grid">
+<button type="button" class="choice" data-who="self">🙋‍♂️<b>O‘zimga</b><small>O‘zim uchun buyurtma</small></button>
+<button type="button" class="choice" data-who="other">🎁<b>Boshqaga</b><small>Boshqa inson uchun</small></button></div>
+<div id="recipient" class="hidden"><label>Qabul qiluvchining telefoni</label><input id="recipientPhone" type="tel" placeholder="+998 90 123 45 67"></div></section>
+<section class="screen"><h2>Maqsadingiz nima?</h2><div class="list">
+<button type="button" class="choice row" data-goal="loss">⚖️ <span><b>Vazn tashlash</b><small>Yengil va muvozanatli ratsion</small></span></button>
+<button type="button" class="choice row" data-goal="form">✨ <span><b>Formani saqlash</b><small>Kundalik sog‘lom ovqatlanish</small></span></button>
+<button type="button" class="choice row" data-goal="gain">💪 <span><b>Vazn yig‘ish</b><small>To‘yimli va foydali ratsion</small></span></button>
+</div></section>
+<section class="screen"><h2>Kunlik kaloriya</h2><div class="list">
+<button type="button" class="choice row" data-cal="1200">1200 kcal <i>→</i></button>
+<button type="button" class="choice row" data-cal="1500">1500 kcal <i>→</i></button>
+<button type="button" class="choice row" data-cal="1800">1800 kcal <i>→</i></button>
+<button type="button" class="choice row" data-cal="individual">Individual <i>→</i></button>
+</div></section>
+<section class="screen"><h2>Ovqatlanish turi</h2><div class="list">
+<button type="button" class="choice row" data-meal="individual">🍽️ <span><b>Individual ovqatlanish</b><small>Sizga moslashtirilgan menyu</small></span></button>
+<button type="button" class="choice row" data-meal="standard">🥗 <span><b>Standart menyu</b><small>Tayyor kunlik menyu</small></span></button>
+</div></section>
+<section class="screen"><h2>Yetkazib berish</h2><label>Stol raqami</label><input id="table" inputmode="numeric" required placeholder="Masalan: 12">
+<button type="button" id="loc" class="location">📍 Manzilni aniqlash</button><p id="locStatus">Joylashuv keyingi bosqichda tasdiqlanadi.</p></section>
+<section class="screen"><h2>Buyurtmangiz</h2><div id="summary" class="summary"></div>
+<h3>To‘lov usuli</h3><button type="button" class="pay selected" data-pay="card">💳 Bank karta</button><button type="button" class="pay" data-pay="click">🟦 Click</button></section>
+<div class="actions"><button type="button" id="back" class="back hidden">← Orqaga</button><button class="primary" id="next">Davom etish</button></div>
+</form>
+<section id="success" class="success hidden"><div class="check">✓</div><p>LIFE FOOD</p><h1>Buyurtma qabul qilindi!</h1><span>Tez orada buyurtmangiz bo‘yicha ma’lumot beramiz.</span><button class="primary" onclick="location.reload()">Bosh sahifaga</button></section>
+</main><script src="app.js"></script>
+</body></html>

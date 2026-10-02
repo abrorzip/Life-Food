@@ -330,7 +330,6 @@ async function continueFlow(event) {
   if (state.i < 6) {
     state.i += 1;
     render();
-handleLocationRequestFromUrl();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return false;
   }
@@ -366,3 +365,4 @@ back.addEventListener('click', event => {
 });
 
 render();
+handleLocationRequestFromUrl();

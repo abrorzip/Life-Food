@@ -3,27 +3,190 @@ import express from 'express';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import { registerLocationRoutes, startLocationBot } from './locationBot.js';
-const {Pool}=pg;
-const app=express();app.use(express.json());
 
-const pool=process.env.DATABASE_URL?new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==='true'?{rejectUnauthorized:false}:undefined}):null;
-function validateTelegramInitData(initData){if(!initData||!process.env.BOT_TOKEN)return null;const params=new URLSearchParams(initData);const hash=params.get('hash');if(!hash)return null;params.delete('hash');const data=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>k+'='+v).join('\n');const secret=crypto.createHmac('sha256','WebAppData').update(process.env.BOT_TOKEN).digest();const calc=crypto.createHmac('sha256',secret).update(data).digest('hex');if(!crypto.timingSafeEqual(Buffer.from(calc),Buffer.from(hash)))return null;const authDate=Number(params.get('auth_date'));if(!authDate||Date.now()/1000-authDate>86400)return null;const user=params.get('user');return user?JSON.parse(user):null}
-app.get('/api/health',(_,res)=>res.json({ok:true,service:'life-food-api'}));
-app.post('/api/orders',async(req,res)=>{try{const b=req.body||{};const tgUser=validateTelegramInitData(b.telegramInitData);if(process.env.BOT_TOKEN&&!tgUser)return res.status(401).json({error:'INVALID_TELEGRAM_DATA'});if(!b.name||!b.phone||!b.forWho||!b.goal||!b.calories||!b.meal||!b.table)return res.status(400).json({error:'MISSING_FIELDS'});if(!pool && !demoMode)return res.status(503).json({error:'DATABASE_NOT_CONFIGURED'});if (!pool) {
-    const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    demoOrders.set(id, {
-      ...b,
-      telegramUserId: tgUser?.id || null,
-      created_at: createdAt
-    });
-    return res.status(201).json({
+const { Pool } = pg;
+const app = express();
+app.use(express.json());
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Init-Data');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+const demoMode = process.env.DEMO_MODE === 'true';
+const botToken = process.env.BOT_TOKEN || '';
+
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined
+    })
+  : null;
+
+const demoOrders = new Map();
+
+function validateTelegramInitData(initData) {
+  if (!initData || !botToken) return null;
+
+  const params = new URLSearchParams(initData);
+  const hash = params.get('hash');
+  if (!hash) return null;
+  params.delete('hash');
+
+  const dataCheckString = [...params.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => key + '=' + value)
+    .join('\n');
+
+  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+  const calculated = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+  if (
+    calculated.length !== hash.length ||
+    !crypto.timingSafeEqual(Buffer.from(calculated), Buffer.from(hash))
+  ) return null;
+
+  const authDate = Number(params.get('auth_date'));
+  if (!authDate || Date.now() / 1000 - authDate > 86400) return null;
+
+  try {
+    return JSON.parse(params.get('user') || '');
+  } catch {
+    return null;
+  }
+}
+
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'life-food-api',
+    database: Boolean(pool),
+    demoMode,
+    botConfigured: Boolean(botToken)
+  });
+});
+
+app.get('/api/profile', async (req, res) => {
+  const tgUser = validateTelegramInitData(req.get('X-Telegram-Init-Data'));
+  if (!tgUser) return res.status(401).json({ error: 'INVALID_TELEGRAM_DATA' });
+
+  if (!pool) {
+    return res.json({
       ok: true,
-      order: { id, status: 'new', created_at: createdAt }
+      profile: {
+        telegramUserId: tgUser.id,
+        name: tgUser.first_name || '',
+        surname: tgUser.last_name || '',
+        phone: null,
+        location: null
+      }
     });
   }
 
-  const q=`INSERT INTO orders (telegram_user_id,name,surname,phone,recipient_phone,for_who,goal,calories,meal,table_number,latitude,longitude,payment,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'new') RETURNING id,status,created_at`;const v=[tgUser?.id||null,b.name,b.surname||'',b.phone,b.recipientPhone||null,b.forWho,b.goal,b.calories,b.meal,b.table,b.location?.lat||null,b.location?.lon||null,b.payment||'card'];const {rows}=await pool.query(q,v);res.json({ok:true,order:rows[0]})}catch(e){console.error(e);res.status(500).json({error:'SERVER_ERROR'})}});
+  try {
+    const { rows } = await pool.query(
+      'SELECT telegram_user_id, name, surname, phone, latitude, longitude FROM profiles WHERE telegram_user_id = $1 LIMIT 1',
+      [tgUser.id]
+    );
+
+    const profile = rows[0];
+    return res.json({
+      ok: true,
+      profile: profile ? {
+        telegramUserId: profile.telegram_user_id,
+        name: profile.name,
+        surname: profile.surname,
+        phone: profile.phone,
+        location: profile.latitude != null && profile.longitude != null
+          ? { lat: Number(profile.latitude), lon: Number(profile.longitude) }
+          : null
+      } : null
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'PROFILE_ERROR' });
+  }
+});
+
+app.post('/api/orders', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const tgUser = validateTelegramInitData(body.telegramInitData);
+    if (botToken && !tgUser) return res.status(401).json({ error: 'INVALID_TELEGRAM_DATA' });
+
+    if (!body.forWho || !body.goal || !body.calories || !body.meal || !body.durationDays || !body.table) {
+      return res.status(400).json({ error: 'MISSING_FIELDS' });
+    }
+
+    if (!pool && !demoMode) {
+      return res.status(503).json({ error: 'DATABASE_NOT_CONFIGURED' });
+    }
+
+    let profile = null;
+    if (pool && tgUser) {
+      const { rows } = await pool.query(
+        'SELECT name, surname, phone FROM profiles WHERE telegram_user_id = $1 LIMIT 1',
+        [tgUser.id]
+      );
+      profile = rows[0] || null;
+    }
+
+    const createdAt = new Date().toISOString();
+    const values = {
+      telegramUserId: tgUser?.id || null,
+      name: profile?.name || tgUser?.first_name || '',
+      surname: profile?.surname || tgUser?.last_name || '',
+      phone: profile?.phone || null,
+      recipientPhone: body.recipientPhone || null,
+      forWho: body.forWho,
+      goal: body.goal,
+      calories: String(body.calories),
+      meal: body.meal,
+      durationDays: Number(body.durationDays),
+      table: String(body.table),
+      latitude: body.location?.lat ?? null,
+      longitude: body.location?.lon ?? null,
+      payment: body.payment || 'card',
+      status: 'new'
+    };
+
+    if (!pool) {
+      const id = crypto.randomUUID();
+      demoOrders.set(id, { id, ...values, createdAt });
+      console.log('DEMO ORDER', { id, ...values, createdAt });
+      return res.status(201).json({ ok: true, order: { id, status: 'new', created_at: createdAt } });
+    }
+
+    const q = `
+      INSERT INTO orders (
+        telegram_user_id,name,surname,phone,recipient_phone,for_who,goal,
+        calories,meal,duration_days,table_number,latitude,longitude,payment,status
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+      RETURNING id,status,created_at
+    `;
+
+    const params = [
+      values.telegramUserId, values.name, values.surname, values.phone, values.recipientPhone,
+      values.forWho, values.goal, values.calories, values.meal, values.durationDays,
+      values.table, values.latitude, values.longitude, values.payment, values.status
+    ];
+
+    const { rows } = await pool.query(q, params);
+    return res.status(201).json({ ok: true, order: rows[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
 registerLocationRoutes(app);
 
-const port=process.env.PORT||3000;app.listen(port,()=>{ console.log('Life Food API listening on '+port); startLocationBot(); });
+const port = Number(process.env.PORT || 3000);
+app.listen(port, () => {
+  console.log('Life Food API listening on ' + port);
+  if (!pool && demoMode) console.log('Demo mode: database is OFF.');
+  startLocationBot();
+});

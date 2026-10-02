@@ -1,49 +1,202 @@
 <!doctype html>
 <html lang="uz">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#1f7a4d">
-<title>Life Food</title>
-<script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-<link rel="stylesheet" href="styles.css">
-<script src="config.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f6f3ed">
+  <title>LIFE FOOD</title>
+  <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
 </head>
 <body>
-<main id="app">
-<header class="topbar"><div class="brand">LIFE <span>FOOD</span></div><div id="step">1 / 7</div></header>
-<section class="hero"><p>LIFE FOOD</p><h1 id="title">Xush kelibsiz!</h1><div id="subtitle">Siz uchun qulay va foydali ovqatlanish rejasini tanlang.</div></section>
-<form id="flow">
-<section class="screen active">
-<label>Ismingiz</label><input id="name" required placeholder="Ismingizni kiriting">
-<label>Familiyangiz</label><input id="surname" required placeholder="Familiyangizni kiriting">
-<label>Telefon raqamingiz</label><input id="phone" type="tel" required placeholder="+998 90 123 45 67">
-</section>
-<section class="screen"><h2>Kim uchun?</h2><div class="grid">
-<button type="button" class="choice" data-who="self">🙋‍♂️<b>O‘zimga</b><small>O‘zim uchun buyurtma</small></button>
-<button type="button" class="choice" data-who="other">🎁<b>Boshqaga</b><small>Boshqa inson uchun</small></button></div>
-<div id="recipient" class="hidden"><label>Qabul qiluvchining telefoni</label><input id="recipientPhone" type="tel" placeholder="+998 90 123 45 67"></div></section>
-<section class="screen"><h2>Maqsadingiz nima?</h2><div class="list">
-<button type="button" class="choice row" data-goal="loss">⚖️ <span><b>Vazn tashlash</b><small>Yengil va muvozanatli ratsion</small></span></button>
-<button type="button" class="choice row" data-goal="form">✨ <span><b>Formani saqlash</b><small>Kundalik sog‘lom ovqatlanish</small></span></button>
-<button type="button" class="choice row" data-goal="gain">💪 <span><b>Vazn yig‘ish</b><small>To‘yimli va foydali ratsion</small></span></button>
-</div></section>
-<section class="screen"><h2>Kunlik kaloriya</h2><div class="list">
-<button type="button" class="choice row" data-cal="1200">1200 kcal <i>→</i></button>
-<button type="button" class="choice row" data-cal="1500">1500 kcal <i>→</i></button>
-<button type="button" class="choice row" data-cal="1800">1800 kcal <i>→</i></button>
-<button type="button" class="choice row" data-cal="individual">Individual <i>→</i></button>
-</div></section>
-<section class="screen"><h2>Ovqatlanish turi</h2><div class="list">
-<button type="button" class="choice row" data-meal="individual">🍽️ <span><b>Individual ovqatlanish</b><small>Sizga moslashtirilgan menyu</small></span></button>
-<button type="button" class="choice row" data-meal="standard">🥗 <span><b>Standart menyu</b><small>Tayyor kunlik menyu</small></span></button>
-</div></section>
-<section class="screen"><h2>Yetkazib berish</h2><label>Stol raqami</label><input id="table" inputmode="numeric" required placeholder="Masalan: 12">
-<button type="button" id="loc" class="location">📍 Joriy manzilni aniqlash</button><p id="locStatus">Joylashuv keyingi bosqichda tasdiqlanadi.</p><div class="location-actions"><button type="button" id="locBot" class="location secondary">✏️ Lokatsiyani o‘zgartirish</button><small>O‘zgartirish bosilganda bot sizdan yangi Telegram Location yuborishni so‘raydi.</small></div></section>
-<section class="screen"><h2>Buyurtmangiz</h2><div id="summary" class="summary"></div>
-<h3>To‘lov usuli</h3><button type="button" class="pay selected" data-pay="card">💳 Bank karta</button><button type="button" class="pay" data-pay="click">🟦 Click</button></section>
-<div class="actions"><button type="button" id="back" class="back hidden">← Orqaga</button><button class="primary" id="next">Davom etish</button></div>
-</form>
-<section id="success" class="success hidden"><div class="check">✓</div><p>LIFE FOOD</p><h1>Buyurtma qabul qilindi!</h1><span>Buyurtma serverga yuborildi.</span><button class="primary" onclick="location.reload()">Bosh sahifaga</button></section>
-</main><script src="app.js"></script>
-</body></html>
+  <main id="app">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark">LF</div>
+        <div>
+          <div class="brand">LIFE <span>FOOD</span></div>
+          <div class="brand-note">Sog‘lom ovqatlanish</div>
+        </div>
+      </div>
+      <div class="profile-chip">
+        <div class="avatar" id="avatar">LF</div>
+        <div class="profile-copy">
+          <strong id="profileName">Mijoz</strong>
+          <span>Telegram orqali kirildi</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="progress-wrap" aria-label="Buyurtma jarayoni">
+      <div class="progress-meta">
+        <span id="stepLabel">1-bosqich</span>
+        <span id="stepCount">1 / 7</span>
+      </div>
+      <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+    </div>
+
+    <section class="intro">
+      <div class="eyebrow"><span class="eyebrow-dot"></span>LIFE FOOD BUYURTMASI</div>
+      <h1 id="title">Kim uchun buyurtma?</h1>
+      <p id="subtitle">Siz uchun yoki yaqin insoningiz uchun sog‘lom menyuni tanlang.</p>
+    </section>
+
+    <form id="flow" novalidate>
+      <section class="screen active">
+        <div class="section-kicker">BUYURTMA EGASI</div>
+        <div class="choice-grid two-col">
+          <button type="button" class="choice-card" data-who="self">
+            <span class="choice-icon">◌</span>
+            <span class="choice-text"><strong>O‘zimga</strong><small>Shaxsiy buyurtmam uchun</small></span>
+            <span class="radio-dot"></span>
+          </button>
+          <button type="button" class="choice-card" data-who="other">
+            <span class="choice-icon">◍</span>
+            <span class="choice-text"><strong>Boshqaga</strong><small>Boshqa inson uchun</small></span>
+            <span class="radio-dot"></span>
+          </button>
+        </div>
+
+        <div id="recipient" class="sub-card hidden">
+          <div class="field-label">Qabul qiluvchining telefoni</div>
+          <div class="field-wrap">
+            <span class="field-prefix">+998</span>
+            <input id="recipientPhone" type="tel" inputmode="tel" placeholder="90 123 45 67" autocomplete="tel">
+          </div>
+          <div class="field-hint">Yetkazib beruvchi shu raqam orqali bog‘lanadi.</div>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="section-kicker">MAQSAD</div>
+        <div class="stack">
+          <button type="button" class="choice-card row-card" data-goal="loss">
+            <span class="choice-icon solid">↓</span>
+            <span class="choice-text"><strong>Vazn tashlash</strong><small>Yengil va muvozanatli ratsion</small></span>
+            <span class="chevron">›</span>
+          </button>
+          <button type="button" class="choice-card row-card" data-goal="form">
+            <span class="choice-icon solid">↗</span>
+            <span class="choice-text"><strong>Formani saqlash</strong><small>Kundalik sog‘lom ovqatlanish</small></span>
+            <span class="chevron">›</span>
+          </button>
+          <button type="button" class="choice-card row-card" data-goal="gain">
+            <span class="choice-icon solid">↑</span>
+            <span class="choice-text"><strong>Vazn yig‘ish</strong><small>To‘yimli va foydali ratsion</small></span>
+            <span class="chevron">›</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="section-kicker">KUNLIK ENERGIYA</div>
+        <div class="choice-grid two-col">
+          <button type="button" class="choice-card compact" data-cal="1200"><strong>1200</strong><span>kcal</span><small>Yengil</small><span class="radio-dot"></span></button>
+          <button type="button" class="choice-card compact" data-cal="1500"><strong>1500</strong><span>kcal</span><small>Muvozanatli</small><span class="radio-dot"></span></button>
+          <button type="button" class="choice-card compact" data-cal="1800"><strong>1800</strong><span>kcal</span><small>To‘yimli</small><span class="radio-dot"></span></button>
+          <button type="button" class="choice-card compact featured" data-cal="individual"><span class="mini-badge">CUSTOM</span><strong>Individual</strong><span>kcal</span><small>Sizga mos</small><span class="radio-dot"></span></button>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="section-kicker">MENYU</div>
+        <div class="stack">
+          <button type="button" class="choice-card row-card tall" data-meal="individual">
+            <span class="choice-icon meal">✦</span>
+            <span class="choice-text"><strong>Individual menyu</strong><small>Maqsadingiz va tanlovingizga moslashtiriladi</small></span>
+            <span class="chevron">›</span>
+          </button>
+          <button type="button" class="choice-card row-card tall" data-meal="standard">
+            <span class="choice-icon meal">≋</span>
+            <span class="choice-text"><strong>Standart menyu</strong><small>Tayyor kundalik menyu asosida</small></span>
+            <span class="chevron">›</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="section-kicker">BUYURTMA MUDDATI</div>
+        <div class="duration-intro">
+          <div>
+            <strong>Necha kunlik reja kerak?</strong>
+            <span>Bir martalik buyurtma emas, butun ovqatlanish davrini belgilang.</span>
+          </div>
+          <div class="calendar-mark">31</div>
+        </div>
+        <div class="choice-grid duration-grid">
+          <button type="button" class="choice-card duration-card" data-duration="7"><strong>7</strong><span>kun</span><small>1 hafta</small><span class="radio-dot"></span></button>
+          <button type="button" class="choice-card duration-card" data-duration="14"><strong>14</strong><span>kun</span><small>2 hafta</small><span class="radio-dot"></span></button>
+          <button type="button" class="choice-card duration-card" data-duration="21"><strong>21</strong><span>kun</span><small>3 hafta</small><span class="radio-dot"></span></button>
+          <button type="button" class="choice-card duration-card" data-duration="30"><strong>30</strong><span>kun</span><small>1 oy</small><span class="radio-dot"></span></button>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="section-kicker">YETKAZIB BERISH</div>
+        <label class="field-label" for="table">Stol raqami</label>
+        <div class="field-wrap">
+          <input id="table" inputmode="numeric" required placeholder="Masalan, 12">
+          <span class="field-suffix">STOL</span>
+        </div>
+
+        <div class="location-card">
+          <div class="location-main">
+            <div class="location-icon">⌖</div>
+            <div>
+              <strong>Yetkazib berish manzili</strong>
+              <span id="locStatus">Botdagi saqlangan lokatsiyadan foydalaniladi.</span>
+            </div>
+          </div>
+          <div class="location-actions">
+            <button type="button" id="locCurrent" class="ghost-btn">Joriy lokatsiyani aniqlash</button>
+            <button type="button" id="locBot" class="ghost-btn">Lokatsiyani o‘zgartirish</button>
+          </div>
+        </div>
+
+        <div class="location-note">
+          <span>i</span>
+          <span>Lokatsiya buyurtma uchun alohida tanlanadi. Keyingi buyurtmada uni yana o‘zgartirishingiz mumkin.</span>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="section-kicker">TEKSHIRISH</div>
+        <div class="summary-card">
+          <div class="summary-head">
+            <div>
+              <span>Buyurtma tafsilotlari</span>
+              <strong>LIFE FOOD</strong>
+            </div>
+            <span class="order-pill">NEW ORDER</span>
+          </div>
+          <div id="summary" class="summary-list"></div>
+        </div>
+
+        <div class="pay-block">
+          <div class="pay-title">To‘lov usuli</div>
+          <div class="pay-grid">
+            <button type="button" class="pay-card selected" data-pay="card"><span class="pay-icon">₿</span><span><strong>Bank karta</strong><small>Online to‘lov</small></span></button>
+            <button type="button" class="pay-card" data-pay="click"><span class="pay-icon">C</span><span><strong>Click</strong><small>Click orqali</small></span></button>
+          </div>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button type="button" id="back" class="back hidden">←</button>
+        <button type="submit" id="next" class="primary"><span>Davom etish</span><span class="arrow">→</span></button>
+      </div>
+    </form>
+
+    <section id="success" class="success hidden">
+      <div class="success-glow"></div>
+      <div class="success-check">✓</div>
+      <div class="eyebrow"><span class="eyebrow-dot"></span>LIFE FOOD</div>
+      <h1>Buyurtma qabul qilindi</h1>
+      <p>Buyurtmangiz tizimga yuborildi. Operator tez orada bog‘lanadi.</p>
+      <button type="button" class="primary" onclick="location.reload()"><span>Yangi buyurtma</span><span class="arrow">↗</span></button>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

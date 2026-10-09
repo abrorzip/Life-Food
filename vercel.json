@@ -1,13 +1,50 @@
 {
   "version": 2,
   "builds": [
-    { "src": "server/server.js", "use": "@vercel/node" },
-    { "src": "admin.js", "use": "@vercel/node" }
+    {
+      "src": "server/server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "admin.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "miniapp/**",
+      "use": "@vercel/static"
+    }
   ],
   "routes": [
-    { "src": "/admin", "dest": "/admin.js" },
-    { "src": "/api/admin", "dest": "/admin.js" },
-    { "src": "/api/admin/(.*)", "dest": "/admin.js" },
-    { "src": "/(.*)", "dest": "server/server.js" }
+    {
+      "src": "/miniapp",
+      "headers": {
+        "Location": "/miniapp/"
+      },
+      "status": 308
+    },
+    {
+      "src": "/miniapp/",
+      "dest": "/miniapp/index.html"
+    },
+    {
+      "src": "/miniapp/(.*)",
+      "dest": "/miniapp/$1"
+    },
+    {
+      "src": "/admin",
+      "dest": "/admin.js"
+    },
+    {
+      "src": "/api/admin",
+      "dest": "/admin.js"
+    },
+    {
+      "src": "/api/admin/(.*)",
+      "dest": "/admin.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "server/server.js"
+    }
   ]
 }

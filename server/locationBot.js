@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { getDb } from './firebase.js';
 
 const botToken = process.env.BOT_TOKEN || '';
@@ -125,7 +125,8 @@ function miniAppKeyboard() {
   return {
     inline_keyboard: [
       [{ text: '🍱 Appni ochish — asosiy', web_app: { url: miniAppUrl } }],
-      [{ text: '✨ Appni ochish — yangi (demo)', web_app: { url: newMiniAppUrl } }]
+      [{ text: '✨ Appni ochish — yangi (demo)', web_app: { url: newMiniAppUrl } }],
+      [{ text: '🔄 Yangilash', callback_data: 'refresh_apps' }]
     ]
   };
 }
@@ -170,13 +171,136 @@ async function startRegistration(chatId, userId, from) {
   await sendMessage(chatId, 'Assalomu alaykum! 👋\n\nQuyidagi tugmalar orqali asosiy yoki yangi appni ochishingiz mumkin.\nYangi app hozircha demo.\n\nAsosiy app uchun profil ochamiz. Ismingizni yozing.', miniAppKeyboard());
 }
 
+function refreshSessionRef(userId) {
+  return getDb().collection('botRefreshSessions').doc(String(userId));
+}
+
+function timestampMillis(value) {
+  const parsed = Date.parse(serializeTimestamp(value) || '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function broadcastAppMenu(requesterId) {
+  const db = getDb();
+  const controlRef = db.collection('botControls').doc('appMenuBroadcast');
+  const acquired = await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(controlRef);
+    if (snapshot.exists && timestampMillis(snapshot.data().activeUntil) > Date.now()) return false;
+    transaction.set(controlRef, { activeUntil: new Date(Date.now() + 10 * 60 * 1000) }, { merge: true });
+    return true;
+  });
+  if (!acquired) return false;
+
+  let delivered = 0;
+  let failed = 0;
+  let lastDoc = null;
+  let requesterIncluded = false;
+  try {
+    while (true) {
+      let query = db.collection('profiles').orderBy(FieldPath.documentId()).limit(100);
+      if (lastDoc) query = query.startAfter(lastDoc);
+      const snapshot = await query.get();
+      if (snapshot.empty) break;
+      for (const doc of snapshot.docs) {
+        const userId = Number(doc.data().telegramUserId || doc.id);
+        if (!Number.isSafeInteger(userId) || userId <= 0) continue;
+        if (userId === Number(requesterId)) requesterIncluded = true;
+        try {
+          await sendMessage(userId, 'Bot yangilandi', miniAppKeyboard());
+          delivered += 1;
+        } catch {
+          failed += 1;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      lastDoc = snapshot.docs.at(-1);
+      if (snapshot.size < 100) break;
+    }
+    if (!requesterIncluded) await sendMessage(requesterId, 'Bot yangilandi', miniAppKeyboard());
+    return true;
+  } finally {
+    await controlRef.set({ activeUntil: new Date(0), delivered, failed, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
+}
+
+async function handleRefreshMessage(chatId, userId, text) {
+  const sessionRef = refreshSessionRef(userId);
+  const snapshot = await sessionRef.get();
+  const session = snapshot.exists ? snapshot.data() : {};
+  const blocked = timestampMillis(session.blockedUntil) > Date.now();
+  if (text === '🔄 Yangilash' || text === '/yangilash') {
+    if (blocked) {
+      await sendMessage(chatId, 'Ko‘p noto‘g‘ri urinish. 5 daqiqadan keyin qayta urinib ko‘ring.');
+      return true;
+    }
+    const attempts = timestampMillis(session.expiresAt) > Date.now() ? Number(session.attempts || 0) : 0;
+    await sessionRef.set({ awaitingCode: true, expiresAt: new Date(Date.now() + 5 * 60 * 1000), attempts }, { merge: true });
+    await sendMessage(chatId, 'Yangilash kodini kiriting. Bekor qilish: /cancel');
+    return true;
+  }
+  if (!session.awaitingCode) return false;
+  if (text === '/cancel' || text.startsWith('/start')) {
+    await sessionRef.set({ awaitingCode: false }, { merge: true });
+    if (text === '/cancel') {
+      await sendMessage(chatId, 'Bekor qilindi.', miniAppKeyboard());
+      return true;
+    }
+    return false;
+  }
+  if (blocked || timestampMillis(session.expiresAt) <= Date.now()) {
+    await sessionRef.set({ awaitingCode: false, attempts: 0 }, { merge: true });
+    await sendMessage(chatId, 'Kod kiritish muddati tugadi. “🔄 Yangilash”ni qayta bosing.');
+    return true;
+  }
+  const expected = Buffer.from(process.env.BOT_REFRESH_CODE || '1234');
+  const supplied = Buffer.from(text);
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+    const attempts = Number(session.attempts || 0) + 1;
+    await sessionRef.set({ attempts, awaitingCode: attempts < 3, blockedUntil: attempts >= 3 ? new Date(Date.now() + 5 * 60 * 1000) : new Date(0) }, { merge: true });
+    await sendMessage(chatId, attempts >= 3 ? 'Ko‘p noto‘g‘ri urinish. 5 daqiqadan keyin qayta urinib ko‘ring.' : 'Kod noto‘g‘ri. Qayta kiriting yoki /cancel bosing.');
+    return true;
+  }
+  await sessionRef.set({ awaitingCode: false, attempts: 0, blockedUntil: new Date(0) }, { merge: true });
+  if (!await broadcastAppMenu(userId)) {
+    await sendMessage(chatId, 'Yangilash hozir bajarilmoqda. Birozdan keyin qayta urinib ko‘ring.');
+  }
+  return true;
+}
+
+let refreshWebhookPromise = null;
+async function ensureRefreshCallbacks() {
+  if (!refreshWebhookPromise) {
+    refreshWebhookPromise = (async () => {
+      const info = await telegramRequest('getWebhookInfo');
+      if (!info.url || info.allowed_updates?.includes('callback_query')) return;
+      const payload = { url: info.url, allowed_updates: ['message', 'callback_query'], drop_pending_updates: false };
+      const secret = process.env.TELEGRAM_WEBHOOK_SECRET || process.env.TELEGRAM_WEBHOOK_SETUP_SECRET || '';
+      if (secret) payload.secret_token = secret;
+      if (info.max_connections) payload.max_connections = info.max_connections;
+      await telegramRequest('setWebhook', payload);
+    })().catch(error => { refreshWebhookPromise = null; throw error; });
+  }
+  return refreshWebhookPromise;
+}
+
 async function handleUpdate(update) {
+  const callback = update?.callback_query;
+  if (callback?.data === 'refresh_apps') {
+    if (callback.message?.chat?.type !== 'private' || !callback.from) return;
+    await telegramRequest('answerCallbackQuery', { callback_query_id: callback.id });
+    await handleRefreshMessage(callback.message.chat.id, callback.from.id, '🔄 Yangilash');
+    return;
+  }
   const message = update?.message;
   if (!message?.chat || !message.from) return;
 
   const chatId = message.chat.id;
   const userId = message.from.id;
   const text = String(message.text || '').trim();
+
+  if (message.chat.type && message.chat.type !== 'private') return;
+  if (text.startsWith('/start')) await ensureRefreshCallbacks();
+  if (await handleRefreshMessage(chatId, userId, text)) return;
 
   if (text.startsWith('/start')) {
     const startParam = text.split(/\s+/)[1] || '';
@@ -455,7 +579,7 @@ export async function startLocationBot() {
       const updates = await telegramRequest('getUpdates', {
         offset,
         timeout: 25,
-        allowed_updates: ['message']
+        allowed_updates: ['message', 'callback_query']
       });
 
       for (const update of updates) {

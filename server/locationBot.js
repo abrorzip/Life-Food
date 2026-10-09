@@ -4,6 +4,7 @@ import { getDb } from './firebase.js';
 
 const botToken = process.env.BOT_TOKEN || '';
 const miniAppUrl = process.env.MINI_APP_URL || '';
+const newMiniAppUrl = process.env.MINI_APP_NEW_URL || 'https://life-food-phi.vercel.app/miniapp/';
 const configuredBotUsername = process.env.BOT_USERNAME || '';
 const pollingEnabled = process.env.BOT_POLLING !== 'false';
 
@@ -122,10 +123,10 @@ function contactKeyboard() {
 
 function miniAppKeyboard() {
   return {
-    inline_keyboard: [[{
-      text: '🍱 Buyurtma berish',
-      web_app: { url: miniAppUrl }
-    }]]
+    inline_keyboard: [
+      [{ text: '🍱 Appni ochish — asosiy', web_app: { url: miniAppUrl } }],
+      [{ text: '✨ Appni ochish — yangi (demo)', web_app: { url: newMiniAppUrl } }]
+    ]
   };
 }
 
@@ -166,7 +167,7 @@ async function startRegistration(chatId, userId, from) {
     createdAt: existing?.createdAt || FieldValue.serverTimestamp()
   });
 
-  await sendMessage(chatId, 'Assalomu alaykum! 👋\n\nLIFE FOOD uchun profil ochamiz.\nIsmingizni yozing.');
+  await sendMessage(chatId, 'Assalomu alaykum! 👋\n\nQuyidagi tugmalar orqali asosiy yoki yangi appni ochishingiz mumkin.\nYangi app hozircha demo.\n\nAsosiy app uchun profil ochamiz. Ismingizni yozing.', miniAppKeyboard());
 }
 
 async function handleUpdate(update) {
